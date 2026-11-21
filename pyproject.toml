@@ -9,7 +9,9 @@ dependencies = [
     "opencv-python",
     "mediapipe",
     "numpy",
+    "torch",
+    "tabpfn",
+    "tabpfn-client",
     "pandas",
     "scikit-learn",
-    "tabpfn-client",
 ]

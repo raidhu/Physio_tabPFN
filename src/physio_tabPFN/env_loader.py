@@ -28,3 +28,11 @@ def load_env(env_path: Optional[Path] = None) -> None:
             os.environ["TABPFN_TOKEN"] = os.environ["api_key"]
         elif "API_KEY" in os.environ:
             os.environ["TABPFN_TOKEN"] = os.environ["API_KEY"]
+
+    # Redirect skrub and matplotlib caches to avoid permission conflicts on macOS
+    if "SKB_DATA_DIRECTORY" not in os.environ:
+        os.environ["SKB_DATA_DIRECTORY"] = "/tmp/skrub_data"
+    if "SKRUB_DATA_DIRECTORY" not in os.environ:
+        os.environ["SKRUB_DATA_DIRECTORY"] = "/tmp/skrub_data"
+    if "MPLCONFIGDIR" not in os.environ:
+        os.environ["MPLCONFIGDIR"] = "/tmp/matplotlib_cache"

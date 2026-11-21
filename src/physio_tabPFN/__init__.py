@@ -10,6 +10,7 @@ from .kinematics import (
     extract_exercise_features,
 )
 from .classifier import PhysioTabPFNModel
+from .quality_counter import QualityRepCounter
 from .env_loader import load_env
 
 __all__ = [
@@ -24,5 +25,6 @@ __all__ = [
     "extract_physio_angles",
     "extract_exercise_features",
     "PhysioTabPFNModel",
+    "QualityRepCounter",
     "load_env",
 ]
