@@ -72,66 +72,6 @@ FEATURE_COLUMNS = [
 DEFAULT_OUTPUT_DIR = Path(__file__).resolve().parent.parent / "data"
 
 
-def extract_features_from_landmarks(landmarks: np.ndarray) -> Optional[np.ndarray]:
-    """Computes scale-invariant features directly from pose landmarks."""
-    if landmarks is None or len(landmarks) < 33:
-        return None
-
-    idx = LandmarkIndex
-
-    # 1. Normalization scale (torso distance)
-    torso_scale = compute_normalization_scale(landmarks, method="torso", use_3d=True)
-    if torso_scale < 1e-5:
-        torso_scale = 1.0
-
-    # 2. Joint angles
-    angles = extract_physio_angles(landmarks, use_3d=False, degrees=True)
-    lk = angles["left_knee"]
-    rk = angles["right_knee"]
-    lh = angles["left_hip"]
-    rh = angles["right_hip"]
-
-    # 3. Spatial positions normalized by torso
-    mid_hip = (landmarks[idx.LEFT_HIP] + landmarks[idx.RIGHT_HIP]) / 2.0
-    mid_shoulder = (landmarks[idx.LEFT_SHOULDER] + landmarks[idx.RIGHT_SHOULDER]) / 2.0
-    mid_ankle = (landmarks[idx.LEFT_ANKLE] + landmarks[idx.RIGHT_ANKLE]) / 2.0
-
-    # Torso tilt relative to vertical
-    torso_vec = mid_shoulder[:2] - mid_hip[:2]
-    torso_len = np.linalg.norm(torso_vec)
-    vertical_axis = np.array([0.0, -1.0])
-    if torso_len > 1e-6:
-        cos_inc = np.dot(torso_vec, vertical_axis) / torso_len
-        trunk_inclination = float(np.degrees(np.arccos(np.clip(cos_inc, -1.0, 1.0))))
-    else:
-        trunk_inclination = 0.0
-
-    hip_height_ratio = float((mid_ankle[1] - mid_hip[1]) / torso_scale)
-    foot_height_diff = float(abs(landmarks[idx.LEFT_ANKLE, 1] - landmarks[idx.RIGHT_ANKLE, 1]) / torso_scale)
-    knee_height_diff = float(abs(landmarks[idx.LEFT_KNEE, 1] - landmarks[idx.RIGHT_KNEE, 1]) / torso_scale)
-    stance_width = float(compute_distance(landmarks[idx.LEFT_ANKLE], landmarks[idx.RIGHT_ANKLE]) / torso_scale)
-
-    vec = [
-        lk,
-        rk,
-        (lk + rk) / 2.0,
-        abs(lk - rk),
-        lh,
-        rh,
-        (lh + rh) / 2.0,
-        abs(lh - rh),
-        angles["left_elbow"],
-        angles["right_elbow"],
-        trunk_inclination,
-        hip_height_ratio,
-        foot_height_diff,
-        knee_height_diff,
-        stance_width,
-        torso_scale,
-    ]
-    return np.array(vec, dtype=np.float32)
-
-
 class DatasetRecorder:
     def __init__(self, output_dir: Path = DEFAULT_OUTPUT_DIR) -> None:
         self.output_dir = output_dir

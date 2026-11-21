@@ -40,6 +40,11 @@ class PhysioTabPFNModel:
             os.environ["TABPFN_TOKEN"] = self.token
             try:
                 tabpfn_init(token=self.token)
+            except TypeError:
+                try:
+                    tabpfn_init()
+                except Exception:
+                    pass
             except Exception:
                 pass
 
