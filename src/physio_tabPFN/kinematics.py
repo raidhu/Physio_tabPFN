@@ -283,16 +283,125 @@ def extract_physio_angles(
     return angles
 
 
-def extract_exercise_features(landmarks: np.ndarray) -> Optional[np.ndarray]:
+def is_full_body_visible(
+    landmarks: np.ndarray,
+    min_visibility: float = 0.25,
+    max_y_boundary: float = 0.98,
+    min_y_boundary: float = -0.10,
+    min_x_boundary: float = -0.10,
+    max_x_boundary: float = 1.10,
+) -> Tuple[bool, str]:
+    """Validates whether essential lower-body and core joints are visible and anatomically plausible.
+
+    Checks key landmarks:
+    - Shoulders (11, 12)
+    - Hips (23, 24)
+    - Knees (25, 26)
+    - Ankles (27, 28)
+
+    Enforces:
+    1. Boundary guard bands (joints must not be clamped off-screen or at bottom edge).
+    2. Visibility confidence floor.
+    3. Kinetic chain integrity (at least one continuous leg from hip -> knee -> ankle).
+    4. Biomechanical proportionality (leg segment length vs torso length).
+
+    Returns:
+        (is_visible: bool, feedback_message: str)
+    """
+    if landmarks is None or len(landmarks) < 33:
+        return False, "No person detected"
+
+    idx = LandmarkIndex
+    has_vis = landmarks.shape[1] >= 4
+
+    def joint_out(joint_idx: int, min_vis: float = min_visibility, max_coord_y: float = max_y_boundary) -> bool:
+        pt = landmarks[joint_idx]
+        y, vis = pt[1], pt[3] if has_vis else 1.0
+        return (
+            (vis < min_vis)
+            or (y > max_coord_y)
+            or (y < min_y_boundary)
+            or (pt[0] < min_x_boundary)
+            or (pt[0] > max_x_boundary)
+        )
+
+    # Shoulders (upper torso anchor)
+    if joint_out(idx.LEFT_SHOULDER, min_vis=0.25, max_coord_y=0.95) and joint_out(idx.RIGHT_SHOULDER, min_vis=0.25, max_coord_y=0.95):
+        return False, "Step back: upper body occluded"
+
+    # Hips (critical for pelvic tracking and torso scale)
+    if joint_out(idx.LEFT_HIP, min_vis=0.25, max_coord_y=0.97) and joint_out(idx.RIGHT_HIP, min_vis=0.25, max_coord_y=0.97):
+        return False, "Step back: hips not in camera frame"
+
+    # Knees (critical for squat depth & step-up flexion)
+    if joint_out(idx.LEFT_KNEE, min_vis=0.20, max_coord_y=0.98) and joint_out(idx.RIGHT_KNEE, min_vis=0.20, max_coord_y=0.98):
+        return False, "Step back: knees not in camera frame"
+
+    # Ankles (critical for stance and foot elevation)
+    if joint_out(idx.LEFT_ANKLE, min_vis=0.15, max_coord_y=0.99) and joint_out(idx.RIGHT_ANKLE, min_vis=0.15, max_coord_y=0.99):
+        return False, "Step back: feet not in camera frame"
+
+    # Continuous kinetic chain: at least one complete leg must be visible
+    left_leg_valid = (
+        not joint_out(idx.LEFT_HIP, min_vis=0.20, max_coord_y=0.97)
+        and not joint_out(idx.LEFT_KNEE, min_vis=0.20, max_coord_y=0.98)
+        and not joint_out(idx.LEFT_ANKLE, min_vis=0.15, max_coord_y=0.99)
+    )
+    right_leg_valid = (
+        not joint_out(idx.RIGHT_HIP, min_vis=0.20, max_coord_y=0.97)
+        and not joint_out(idx.RIGHT_KNEE, min_vis=0.20, max_coord_y=0.98)
+        and not joint_out(idx.RIGHT_ANKLE, min_vis=0.15, max_coord_y=0.99)
+    )
+    if not left_leg_valid and not right_leg_valid:
+        return False, "Step back: lower body occluded"
+
+    # Biomechanical proportionality check:
+    # A human torso and legs have physiological bounds. When seated at a desk, hallucinated
+    # lower-body landmarks collapse against the bottom edge of the frame.
+    mid_shoulder = (landmarks[idx.LEFT_SHOULDER, :2] + landmarks[idx.RIGHT_SHOULDER, :2]) / 2.0
+    mid_hip = (landmarks[idx.LEFT_HIP, :2] + landmarks[idx.RIGHT_HIP, :2]) / 2.0
+    torso_len = float(np.linalg.norm(mid_shoulder - mid_hip))
+
+    if torso_len > 0.05:
+        left_femur = float(np.linalg.norm(landmarks[idx.LEFT_HIP, :2] - landmarks[idx.LEFT_KNEE, :2]))
+        left_tibia = float(np.linalg.norm(landmarks[idx.LEFT_KNEE, :2] - landmarks[idx.LEFT_ANKLE, :2]))
+        right_femur = float(np.linalg.norm(landmarks[idx.RIGHT_HIP, :2] - landmarks[idx.RIGHT_KNEE, :2]))
+        right_tibia = float(np.linalg.norm(landmarks[idx.RIGHT_KNEE, :2] - landmarks[idx.RIGHT_ANKLE, :2]))
+
+        left_leg_len = (left_femur + left_tibia) if left_leg_valid else 0.0
+        right_leg_len = (right_femur + right_tibia) if right_leg_valid else 0.0
+        max_leg_len = max(left_leg_len, right_leg_len)
+
+        # In real human anatomy, femur + tibia is at least 0.70x to 1.8x torso length even in deep squats.
+        # If leg length collapses relative to torso, lower body is clipped or hallucinated.
+        if max_leg_len < 0.70 * torso_len:
+            return False, "Step back: lower body truncated"
+
+    return True, "Full body visible"
+
+
+def extract_exercise_features(
+    landmarks: np.ndarray, require_full_body: bool = True
+) -> Optional[np.ndarray]:
     """Computes the 16 distance-invariant kinematic features used for TabPFN classification.
 
     Features:
     - 10 joint angles (left/right/mean/diff for knees and hips, plus elbows)
     - 6 normalized spatial metrics (trunk inclination, hip-height ratio, foot height diff,
       knee height diff, normalized stance width, torso scale)
+
+    Args:
+        landmarks: MediaPipe pose landmark array of shape (33, 3) or (33, 4).
+        require_full_body: If True, validates full body visibility before computing features.
+                           Returns None if lower body joints are not in camera frame.
     """
     if landmarks is None or len(landmarks) < 33:
         return None
+
+    if require_full_body:
+        is_visible, _ = is_full_body_visible(landmarks)
+        if not is_visible:
+            return None
 
     idx = LandmarkIndex
 

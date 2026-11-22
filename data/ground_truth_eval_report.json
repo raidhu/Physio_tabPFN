@@ -1,0 +1,84 @@
+{
+  "timestamp": 1795347452.473359,
+  "model_classes": [
+    "Idle",
+    "Squats",
+    "Step-Ups"
+  ],
+  "classification": {
+    "trained_classes": [
+      "Squats",
+      "Step-Ups",
+      "Idle"
+    ],
+    "trained_classes_accuracy": 1.0,
+    "overall_accuracy": 0.713,
+    "mean_latency_ms": 117.96,
+    "p95_latency_ms": 124.3,
+    "mean_confidence": 0.8478,
+    "per_class": {
+      "Pogo Hops": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1_score": 0.0,
+        "support": 31.0
+      },
+      "Squats": {
+        "precision": 0.65,
+        "recall": 1.0,
+        "f1_score": 0.788,
+        "support": 39.0
+      },
+      "Step-Ups": {
+        "precision": 0.792,
+        "recall": 1.0,
+        "f1_score": 0.884,
+        "support": 38.0
+      }
+    },
+    "confusion_matrix": {
+      "labels": [
+        "Pogo Hops",
+        "Squats",
+        "Step-Ups"
+      ],
+      "matrix": [
+        [
+          0,
+          21,
+          10
+        ],
+        [
+          0,
+          39,
+          0
+        ],
+        [
+          0,
+          0,
+          38
+        ]
+      ]
+    }
+  },
+  "repetition_validation": {
+    "Squats": {
+      "video_file": "Squats.mov",
+      "total_frames": 39,
+      "valid_reps_detected": 1,
+      "bad_reps_detected": 0,
+      "last_rep_status": "GOOD",
+      "target_repetition_passed": true,
+      "feedback": "\u2713 Clean Rep 1! Great depth."
+    },
+    "Step-Ups": {
+      "video_file": "Step-Ups.mov",
+      "total_frames": 38,
+      "valid_reps_detected": 2,
+      "bad_reps_detected": 0,
+      "last_rep_status": "GOOD",
+      "target_repetition_passed": true,
+      "feedback": "\u2713 Good Step-Up 2!"
+    }
+  }
+}

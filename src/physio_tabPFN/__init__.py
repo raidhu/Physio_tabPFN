@@ -7,6 +7,7 @@ from .kinematics import (
     compute_normalization_scale,
     normalize_landmarks,
     extract_physio_angles,
+    is_full_body_visible,
     extract_exercise_features,
 )
 from .classifier import PhysioTabPFNModel
@@ -23,6 +24,7 @@ __all__ = [
     "compute_normalization_scale",
     "normalize_landmarks",
     "extract_physio_angles",
+    "is_full_body_visible",
     "extract_exercise_features",
     "PhysioTabPFNModel",
     "QualityRepCounter",

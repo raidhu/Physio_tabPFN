@@ -10,7 +10,6 @@ This guide details best practices for collecting high-quality, fault-free kinema
 |:---:|:---|:---|
 | **`[1]`** | **Squats** | Symmetrical leg flexion/extension, upright-to-leaning trunk. |
 | **`[2]`** | **Step-Ups** | Strong asymmetrical leg elevation, one foot higher than the other. |
-| **`[3]`** | **Pogo Hops** | Minimal knee flexion, rapid vertical bouncing off the ankles. |
 | **`[0]`** | **Idle** | Standing still, walking in place, minor shifting, resting. |
 
 > **Important:** **Do not skip the `Idle` class!** Machine learning models require negative examples to know when a person is resting or preparing, preventing false positive exercise predictions.
@@ -33,7 +32,6 @@ To prevent MediaPipe tracking dropouts and jitter:
 1. **Full-Body Visibility:**
    - Both feet and the top of the head **must remain in frame** throughout the full range of motion.
    - For **Step-Ups**, ensure the box/step and raised foot do not clip outside the frame.
-   - For **Pogo Hops**, ensure the head does not leave the top of the frame at the peak of the jump.
 2. **Camera Height & Angle:**
    - Place camera at hip/chest level (~1 meter high).
    - Avoid looking from high angles pointing down or ground level pointing up.
@@ -52,7 +50,6 @@ To prevent MediaPipe tracking dropouts and jitter:
 | **`Spacebar`** | **Start / Pause Recording** | Triggers a **3-second visual countdown** before recording begins. |
 | **`1`** | Select **Squats** | Switched label displays on top bar. |
 | **`2`** | Select **Step-Ups** | Sets label to `Step-Ups`. |
-| **`3`** | Select **Pogo Hops** | Sets label to `Pogo Hops`. |
 | **`0`** | Select **Idle** | Sets label to `Idle` (standing/resting). |
 | **`s`** | **Save to CSV** | Appends recorded session data to `data/exercise_dataset.csv`. |
 | **`c`** | **Clear Buffer** | Clears unsaved frames in the current session. |
@@ -76,7 +73,7 @@ python scripts/record_dataset.py
 4. Press **`Spacebar`** to pause.
 
 ### Step 3: Record Exercise Repetitions (~400–600 frames per exercise)
-For each exercise (**Squats `1`**, **Step-Ups `2`**, **Pogo Hops `3`**):
+For each exercise (**Squats `1`**, **Step-Ups `2`**):
 1. Press the corresponding number key to update the active label.
 2. Press **`Spacebar`**.
 3. During the 3-second countdown, get into the starting posture.
@@ -99,8 +96,7 @@ For **TabPFN**, you only need small-to-moderate high-quality datasets:
 | **Idle** | ~500 frames | ~15-20 sec | Natural standing |
 | **Squats** | ~500 frames | ~15-20 sec | 6–10 smooth reps |
 | **Step-Ups** | ~500 frames | ~15-20 sec | 6–10 alternating reps |
-| **Pogo Hops** | ~500 frames | ~15-20 sec | 15–20 short hops |
-| **Total** | **~2,000 frames** | **~1-2 minutes** | Balanced dataset |
+| **Total** | **~1,500 frames** | **~1-2 minutes** | Balanced dataset |
 
 ---
 

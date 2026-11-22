@@ -1,7 +1,7 @@
 """Physio-TabPFN Web Application.
 
 Design:
-- Inspired by the attached design:
+- the design:
   * Bold headline typography ("YOU'RE A..." style with prominent bold uppercase text).
   * Animated floating background SVG/mesh waves pattern.
   * Strict Black, White & Grey monochrome palette.
@@ -28,6 +28,7 @@ from physio_tabPFN import (
     PhysioTabPFNModel,
     QualityRepCounter,
     extract_exercise_features,
+    is_full_body_visible,
 )
 from physio_tabPFN.env_loader import load_env
 
@@ -42,7 +43,7 @@ class AppState:
         self.latest_jpeg_frame: Optional[bytes] = None
         self.predicted_exercise = "Idle"
         self.confidence = 0.0
-        self.probabilities = {"Idle": 1.0, "Squats": 0.0, "Step-Ups": 0.0, "Pogo Hops": 0.0}
+        self.probabilities = {"Idle": 1.0, "Squats": 0.0, "Step-Ups": 0.0}
         self.latency_ms = 0.0
         self.mode = "LOCAL"
         self.active_exercise = "Squats"
@@ -51,12 +52,12 @@ class AppState:
     def set_active_exercise(self, name: str):
         with self.lock:
             self.active_exercise = name
-            self.counter.reset(name)
+            self.counter.reset(name, reset_counts=False)
             print(f"[App] Target exercise changed to: {name}")
 
     def reset_counter(self):
         with self.lock:
-            self.counter.reset(self.active_exercise)
+            self.counter.reset(self.active_exercise, reset_counts=True)
             print("[App] Counters reset")
 
     def get_status_json(self) -> str:
@@ -75,6 +76,7 @@ class AppState:
                 "feedback": summary["feedback"],
                 "last_rep_status": summary["last_rep_status"],
                 "posture_counts": summary["posture_counts"],
+                "exercise_reps": summary.get("exercise_reps", {}),
                 "probabilities": {k: round(v * 100, 1) for k, v in self.probabilities.items()},
             }
             return json.dumps(data)
@@ -82,531 +84,11 @@ class AppState:
 
 state = AppState()
 
-HTML_PAGE = """<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PhysioTabPFN | Movement Analysis</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <style>
-    :root {
-      --bg: #ffffff;
-      --card-bg: rgba(255, 255, 255, 0.95);
-      --border: #e5e7eb;
-      --border-dark: #111827;
-      --text: #111827;
-      --muted: #6b7280;
-      --light-grey: #f3f4f6;
-    }
-
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    
-    body {
-      font-family: 'Inter', -apple-system, sans-serif;
-      background-color: var(--bg);
-      color: var(--text);
-      min-height: 100vh;
-      overflow-x: hidden;
-      position: relative;
-    }
-
-    /* Animated Pattern Background (Subtle Monochrome Waves) */
-    .bg-pattern {
-      position: fixed;
-      inset: 0;
-      z-index: -1;
-      opacity: 0.045;
-      background-image: 
-        radial-gradient(circle at 20% 30%, #000 1px, transparent 1px),
-        radial-gradient(circle at 80% 70%, #000 1px, transparent 1px);
-      background-size: 40px 40px;
-      pointer-events: none;
-    }
-    .wave-bg {
-      position: fixed;
-      bottom: -80px;
-      left: 0;
-      width: 200%;
-      height: 320px;
-      z-index: -1;
-      opacity: 0.035;
-      background: repeat-x url('data:image/svg+xml;utf8,<svg viewBox="0 0 1200 120" xmlns="http://www.w3.org/2000/svg"><path d="M0,0 C150,90 350,-40 500,45 C650,130 900,-20 1200,40 L1200,120 L0,120 Z" fill="%23000"/></svg>');
-      animation: waveFloat 22s linear infinite;
-    }
-    @keyframes waveFloat {
-      0% { transform: translateX(0); }
-      100% { transform: translateX(-50%); }
-    }
-
-    /* Header matching Poster Style */
-    header {
-      padding: 24px 48px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      border-bottom: 1px solid var(--border);
-      background: rgba(255, 255, 255, 0.85);
-      backdrop-filter: blur(10px);
-      position: sticky;
-      top: 0;
-      z-index: 50;
-    }
-
-    .brand-group {
-      display: flex;
-      flex-direction: column;
-    }
-    .brand-eyebrow {
-      font-size: 0.72rem;
-      font-weight: 700;
-      letter-spacing: 2px;
-      text-transform: uppercase;
-      color: var(--muted);
-    }
-    .brand-title {
-      font-family: 'Syne', sans-serif;
-      font-size: 1.6rem;
-      font-weight: 800;
-      letter-spacing: -0.5px;
-      color: var(--text);
-      line-height: 1.1;
-    }
-
-    .badge-bar {
-      display: flex;
-      gap: 10px;
-    }
-    .badge {
-      font-size: 0.76rem;
-      font-weight: 600;
-      letter-spacing: 0.4px;
-      padding: 6px 14px;
-      border-radius: 6px;
-      background: var(--light-grey);
-      color: var(--muted);
-      border: 1px solid var(--border);
-    }
-
-    /* Container Grid */
-    .container {
-      max-width: 1440px;
-      margin: 28px auto;
-      padding: 0 40px;
-      display: grid;
-      grid-template-columns: 1fr 420px;
-      gap: 32px;
-    }
-
-    /* Left Video Showcase Card */
-    .video-card {
-      background: var(--card-bg);
-      border: 1px solid var(--border);
-      border-radius: 20px;
-      padding: 20px;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.03);
-      display: flex;
-      flex-direction: column;
-      gap: 18px;
-    }
-
-    .video-wrapper {
-      position: relative;
-      width: 100%;
-      border-radius: 14px;
-      overflow: hidden;
-      aspect-ratio: 16 / 9;
-      background: #fafafa;
-      border: 1px solid var(--border);
-    }
-
-    .video-wrapper img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      display: block;
-    }
-
-    .pill-clean {
-      position: absolute;
-      top: 16px;
-      left: 16px;
-      background: rgba(255, 255, 255, 0.94);
-      border: 1px solid var(--border);
-      padding: 6px 14px;
-      border-radius: 8px;
-      font-size: 0.74rem;
-      font-weight: 700;
-      letter-spacing: 0.5px;
-      text-transform: uppercase;
-      color: var(--text);
-    }
-
-    /* Dynamic Form Quality Banner */
-    .quality-banner {
-      background: #f9fafb;
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 20px 24px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-    .banner-label {
-      font-size: 0.72rem;
-      font-weight: 800;
-      letter-spacing: 1.5px;
-      text-transform: uppercase;
-      color: var(--muted);
-    }
-    .banner-value {
-      font-size: 1.25rem;
-      font-weight: 700;
-      color: var(--text);
-      margin-top: 4px;
-      transition: all 0.2s;
-    }
-    .score-circle {
-      text-align: right;
-    }
-    .score-number {
-      font-family: 'Syne', sans-serif;
-      font-size: 2.2rem;
-      font-weight: 800;
-      color: var(--text);
-      line-height: 1;
-    }
-
-    /* Right Panel Widgets */
-    .panel {
-      display: flex;
-      flex-direction: column;
-      gap: 22px;
-    }
-
-    .card {
-      background: var(--card-bg);
-      border: 1px solid var(--border);
-      border-radius: 18px;
-      padding: 22px;
-      box-shadow: 0 4px 16px rgba(0,0,0,0.02);
-    }
-
-    .card-heading {
-      font-size: 0.72rem;
-      font-weight: 800;
-      letter-spacing: 1.5px;
-      text-transform: uppercase;
-      color: var(--muted);
-      margin-bottom: 14px;
-    }
-
-    /* Big Bold Poster Style Prediction Headline */
-    .headline-card {
-      background: #111827;
-      color: #ffffff;
-      border-radius: 18px;
-      padding: 24px;
-      text-align: center;
-    }
-    .headline-eyebrow {
-      font-size: 0.7rem;
-      letter-spacing: 2px;
-      font-weight: 700;
-      text-transform: uppercase;
-      color: #9ca3af;
-    }
-    .headline-main {
-      font-family: 'Syne', sans-serif;
-      font-size: 2.4rem;
-      font-weight: 800;
-      letter-spacing: -0.5px;
-      text-transform: uppercase;
-      margin-top: 4px;
-      line-height: 1.1;
-      color: #ffffff;
-    }
-    .headline-conf {
-      font-size: 0.85rem;
-      font-weight: 600;
-      color: #d1d5db;
-      margin-top: 6px;
-    }
-
-    /* Exercise Selector Segmented Control */
-    .selector-bar {
-      display: flex;
-      gap: 8px;
-      background: var(--light-grey);
-      padding: 6px;
-      border-radius: 12px;
-    }
-    .btn-choice {
-      flex: 1;
-      background: transparent;
-      border: none;
-      color: var(--muted);
-      padding: 10px 4px;
-      border-radius: 8px;
-      font-family: inherit;
-      font-size: 0.82rem;
-      font-weight: 700;
-      cursor: pointer;
-      transition: all 0.15s ease;
-      text-align: center;
-    }
-    .btn-choice.active {
-      background: #ffffff;
-      color: #111827;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.06);
-    }
-
-    /* Set Repetition Boxes */
-    .rep-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 14px;
-      margin-top: 8px;
-    }
-    .rep-box {
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 16px;
-      background: #fafafa;
-    }
-    .rep-box.valid { border-color: #111827; }
-    .rep-num {
-      font-family: 'Syne', sans-serif;
-      font-size: 2.8rem;
-      font-weight: 800;
-      line-height: 1;
-      color: var(--text);
-    }
-    .rep-label {
-      font-size: 0.7rem;
-      font-weight: 700;
-      letter-spacing: 0.8px;
-      text-transform: uppercase;
-      color: var(--muted);
-      margin-top: 4px;
-    }
-
-    /* Multi-Widget Posture Matrix */
-    .posture-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-      margin-top: 8px;
-    }
-    .posture-widget {
-      background: #fafafa;
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 12px 14px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .posture-name {
-      font-size: 0.78rem;
-      font-weight: 700;
-      color: var(--text);
-    }
-    .posture-badge {
-      font-size: 0.85rem;
-      font-family: 'Syne', sans-serif;
-      font-weight: 800;
-      color: var(--muted);
-    }
-
-    .btn-reset {
-      width: 100%;
-      background: transparent;
-      border: 1px solid var(--border);
-      color: var(--muted);
-      padding: 12px;
-      border-radius: 10px;
-      font-family: inherit;
-      font-size: 0.82rem;
-      font-weight: 700;
-      letter-spacing: 0.5px;
-      text-transform: uppercase;
-      cursor: pointer;
-      margin-top: 14px;
-      transition: all 0.2s;
-    }
-    .btn-reset:hover {
-      border-color: #111827;
-      color: #111827;
-      background: #f9fafb;
-    }
-  </style>
-</head>
-<body>
-
-  <div class="bg-pattern"></div>
-  <div class="wave-bg"></div>
-
-  <header>
-    <div class="brand-group">
-      <span class="brand-eyebrow">BIO-MECHANICS AI</span>
-      <span class="brand-title">PHYSIO-TABPFN</span>
-    </div>
-    <div class="badge-bar">
-      <div class="badge" id="latencyBadge">LATENCY: 0 MS</div>
-      <div class="badge" id="modeBadge">TABPFN LOCAL</div>
-    </div>
-  </header>
-
-  <div class="container">
-    <!-- Video Showcase Left -->
-    <div class="video-card">
-      <div class="video-wrapper">
-        <img src="/video_feed" alt="Live Stream">
-        <div class="pill-clean">Clean Camera Feed (No Skeleton)</div>
-      </div>
-      <div class="quality-banner">
-        <div>
-          <div class="banner-label">Form Feedback</div>
-          <div class="banner-value" id="feedbackText">Ready. Begin your set.</div>
-        </div>
-        <div class="score-circle">
-          <div class="banner-label">Form Quality</div>
-          <div class="score-number" id="qualityScore">100%</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Side Panel Widgets Right -->
-    <div class="panel">
-      <!-- Highest Prediction on Top in Large Poster Typography -->
-      <div class="headline-card">
-        <div class="headline-eyebrow">CURRENT POSTURE</div>
-        <div class="headline-main" id="topHeadline">IDLE</div>
-        <div class="headline-conf" id="topConfidence">100% Confidence</div>
-      </div>
-
-      <!-- Target Exercise Selector -->
-      <div class="card">
-        <div class="card-heading">Target Exercise</div>
-        <div class="selector-bar">
-          <button class="btn-choice active" id="btn-Squats" onclick="selectExercise('Squats')">Squats</button>
-          <button class="btn-choice" id="btn-Step-Ups" onclick="selectExercise('Step-Ups')">Step-Ups</button>
-          <button class="btn-choice" id="btn-Pogo-Hops" onclick="selectExercise('Pogo Hops')">Pogo Hops</button>
-        </div>
-      </div>
-
-      <!-- Set Repetition Counter -->
-      <div class="card">
-        <div class="card-heading">Set Repetition Counter</div>
-        <div class="rep-grid">
-          <div class="rep-box valid">
-            <div class="rep-num" id="validReps">0</div>
-            <div class="rep-label">Valid Reps</div>
-          </div>
-          <div class="rep-box">
-            <div class="rep-num" id="badReps" style="color: #6b7280;">0</div>
-            <div class="rep-label">Bad Reps (Rejected)</div>
-          </div>
-        </div>
-        <button class="btn-reset" onclick="triggerReset()">Reset Counter</button>
-      </div>
-
-      <!-- Multi-Widget Posture Tracker Matrix -->
-      <div class="card">
-        <div class="card-heading">Posture Matrix (Frame Detections)</div>
-        <div class="posture-grid">
-          <div class="posture-widget">
-            <span class="posture-name">Squats</span>
-            <span class="posture-badge" id="count-Squats">0</span>
-          </div>
-          <div class="posture-widget">
-            <span class="posture-name">Step-Ups</span>
-            <span class="posture-badge" id="count-Step-Ups">0</span>
-          </div>
-          <div class="posture-widget">
-            <span class="posture-name">Pogo Hops</span>
-            <span class="posture-badge" id="count-Pogo-Hops">0</span>
-          </div>
-          <div class="posture-widget">
-            <span class="posture-name">Idle</span>
-            <span class="posture-badge" id="count-Idle">0</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <script>
-    async function updateDashboard() {
-      try {
-        const res = await fetch('/status');
-        if (!res.ok) return;
-        const data = await res.json();
-
-        // 1. Move highest prediction on top in large bold character headline
-        document.getElementById('topHeadline').innerText = data.predicted_exercise.toUpperCase();
-        document.getElementById('topConfidence').innerText = data.confidence + '% Confidence';
-
-        // 2. Dynamic live Form Feedback and Quality %
-        document.getElementById('feedbackText').innerText = data.feedback;
-        document.getElementById('qualityScore').innerText = data.quality_score + '%';
-
-        // 3. Valid Reps and Bad Reps
-        document.getElementById('validReps').innerText = data.valid_reps;
-        document.getElementById('badReps').innerText = data.bad_reps;
-
-        // 4. Latency & Mode
-        document.getElementById('latencyBadge').innerText = 'LATENCY: ' + data.latency_ms + ' MS';
-        document.getElementById('modeBadge').innerText = 'TABPFN ' + data.mode;
-
-        // 5. Posture counts widget matrix
-        if (data.posture_counts) {
-          document.getElementById('count-Squats').innerText = data.posture_counts['Squats'] || 0;
-          document.getElementById('count-Step-Ups').innerText = data.posture_counts['Step-Ups'] || 0;
-          document.getElementById('count-Pogo-Hops').innerText = data.posture_counts['Pogo Hops'] || 0;
-          document.getElementById('count-Idle').innerText = data.posture_counts['Idle'] || 0;
-        }
-
-        // 6. Active Exercise Selector
-        document.querySelectorAll('.btn-choice').forEach(btn => {
-          btn.classList.toggle('active', btn.innerText.trim() === data.active_exercise.trim());
-        });
-
-      } catch (err) {
-        console.error('Fetch error:', err);
-      }
-    }
-
-    async function selectExercise(name) {
-      document.querySelectorAll('.btn-choice').forEach(btn => {
-        btn.classList.toggle('active', btn.innerText.trim() === name.trim());
-      });
-      try {
-        await fetch('/set_exercise?name=' + encodeURIComponent(name));
-      } catch (e) {
-        console.error(e);
-      }
-    }
-
-    async function triggerReset() {
-      try {
-        await fetch('/reset');
-        document.getElementById('validReps').innerText = '0';
-        document.getElementById('badReps').innerText = '0';
-        document.getElementById('qualityScore').innerText = '100%';
-      } catch (e) {
-        console.error(e);
-      }
-    }
-
-    setInterval(updateDashboard, 100);
-  </script>
-</body>
-</html>
-"""
+TEMPLATE_PATH = Path(__file__).resolve().parent / "src" / "physio_tabPFN" / "web" / "templates" / "index.html"
+if TEMPLATE_PATH.exists():
+    HTML_PAGE = TEMPLATE_PATH.read_text(encoding="utf-8")
+else:
+    raise FileNotFoundError(f"Template not found at {TEMPLATE_PATH}")
 
 
 class WebRequestHandler(BaseHTTPRequestHandler):
@@ -673,6 +155,13 @@ def run_cv_inference_loop(model: PhysioTabPFNModel):
         while True:
             rgb_frame = cam.read_rgb()
             if rgb_frame is None:
+                with state.lock:
+                    if state.latest_jpeg_frame is None:
+                        standby = np.ones((720, 1280, 3), dtype=np.uint8) * 255
+                        cv2.putText(standby, "Camera Initializing...", (420, 360),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 1.2, (60, 60, 60), 2)
+                        _, jpg = cv2.imencode(".jpg", standby)
+                        state.latest_jpeg_frame = jpg.tobytes()
                 time.sleep(0.01)
                 continue
 
@@ -683,34 +172,101 @@ def run_cv_inference_loop(model: PhysioTabPFNModel):
             preview_frame = cv2.cvtColor(rgb_frame, cv2.COLOR_RGB2BGR)
 
             if landmarks_np is not None:
-                features = extract_exercise_features(landmarks_np)
+                body_ok, body_msg = is_full_body_visible(landmarks_np)
 
-                if features is not None:
-                    # Query TabPFN every 3 frames
-                    if frame_idx % 3 == 0:
-                        t0 = time.perf_counter()
-                        try:
-                            lbl, conf, probs = model.predict_single(features)
-                            elapsed_ms = (time.perf_counter() - t0) * 1000.0
+                if not body_ok:
+                    estimator.draw_landmarks(preview_frame, results)
+                    # High contrast monochrome banner on preview feed
+                    h, w = preview_frame.shape[:2]
+                    banner_h = 70
+                    overlay = preview_frame.copy()
+                    cv2.rectangle(overlay, (0, h - banner_h), (w, h), (17, 24, 39), -1)
+                    cv2.addWeighted(overlay, 0.85, preview_frame, 0.15, 0, preview_frame)
+                    cv2.putText(
+                        preview_frame,
+                        "STEP BACK: FULL BODY REQUIRED",
+                        (max(20, w // 2 - 240), h - 38),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.75,
+                        (255, 255, 255),
+                        2,
+                        cv2.LINE_AA,
+                    )
+                    cv2.putText(
+                        preview_frame,
+                        "Hips, knees, and feet must be in camera frame to track reps.",
+                        (max(20, w // 2 - 270), h - 14),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.50,
+                        (209, 213, 219),
+                        1,
+                        cv2.LINE_AA,
+                    )
+                    with state.lock:
+                        state.predicted_exercise = "Step Back"
+                        state.confidence = 0.0
+                        state.counter.feedback = body_msg
+                        state.counter.update("Step Back", 0.0, None)
+                else:
+                    estimator.draw_landmarks(preview_frame, results)
+                    features = extract_exercise_features(landmarks_np, require_full_body=True)
+
+                    if features is not None:
+                        # Query TabPFN every 3 frames
+                        if frame_idx % 3 == 0:
+                            t0 = time.perf_counter()
+                            try:
+                                raw_lbl, raw_conf, raw_probs = model.predict_single(features, min_confidence=0.0)
+                                elapsed_ms = (time.perf_counter() - t0) * 1000.0
+                                with state.lock:
+                                    # Temporal EMA smoothing across inference frames (65% current, 35% historical)
+                                    smoothed_probs = {}
+                                    for cls, p in raw_probs.items():
+                                        prev_p = state.probabilities.get(cls, p)
+                                        smoothed_probs[cls] = round(0.65 * p + 0.35 * prev_p, 4)
+
+                                    top_cls = max(smoothed_probs, key=smoothed_probs.get)
+                                    top_conf = smoothed_probs[top_cls]
+
+                                    # Mark as Unknown if confidence < 60%
+                                    if top_conf < 0.60:
+                                        lbl = "Unknown"
+                                        conf = top_conf
+                                    else:
+                                        lbl = top_cls
+                                        conf = top_conf
+
+                                    state.predicted_exercise = lbl
+                                    state.confidence = conf
+                                    state.probabilities = smoothed_probs
+                                    state.latency_ms = (
+                                        (0.7 * state.latency_ms + 0.3 * elapsed_ms)
+                                        if state.latency_ms > 0
+                                        else elapsed_ms
+                                    )
+
+                                    # Auto-synchronize active exercise to detected posture if standing
+                                    if lbl in ("Squats", "Step-Ups") and conf >= 0.60:
+                                        if state.counter.state == "standing" and state.active_exercise != lbl:
+                                            state.active_exercise = lbl
+                                            state.counter.exercise = lbl
+
+                                    state.counter.update(lbl, conf, features)
+                            except Exception as e:
+                                print(f"[Model Warning]: {e}")
+                                with state.lock:
+                                    state.counter.update(state.predicted_exercise, state.confidence, features)
+                        else:
                             with state.lock:
-                                state.predicted_exercise = lbl
-                                state.confidence = conf
-                                state.probabilities = probs
-                                state.latency_ms = (
-                                    (0.7 * state.latency_ms + 0.3 * elapsed_ms)
-                                    if state.latency_ms > 0
-                                    else elapsed_ms
-                                )
-                                state.counter.update(lbl, conf, features)
-                        except Exception as e:
-                            print(f"[Model Warning]: {e}")
+                                state.counter.update(state.predicted_exercise, state.confidence, features)
                     else:
                         with state.lock:
-                            state.counter.update(state.predicted_exercise, state.confidence, features)
+                            state.counter.update(state.predicted_exercise, state.confidence, None)
             else:
                 with state.lock:
                     state.predicted_exercise = "Idle"
                     state.confidence = 1.0
+                    state.counter.update("Idle", 1.0, None)
 
             # JPEG encode for web streaming
             ret, jpeg = cv2.imencode(".jpg", preview_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
@@ -729,8 +285,8 @@ def main():
     print(" Initializing Model & In-Context Dataset...")
     print("=" * 65)
 
-    tabpfn_model = PhysioTabPFNModel(mode="auto")
-    tabpfn_model.fit_from_csv(DATASET_CSV, max_samples_per_class=25)
+    tabpfn_model = PhysioTabPFNModel(mode="auto", N_ensemble_configurations=1)
+    tabpfn_model.fit_from_csv(DATASET_CSV, max_samples_per_class=12)
     state.mode = tabpfn_model.active_mode.upper()
 
     cam_thread = threading.Thread(target=run_cv_inference_loop, args=(tabpfn_model,), daemon=True)

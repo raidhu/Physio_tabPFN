@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PhysioTabPFN | Movement Analysis</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #ffffff;                 /* Pure Crisp White Background */
+      --card-bg: #ffffff;            /* Pure Crisp White Card */
+      --border: #e5e7eb;             /* Soft Neutral Light Grey Border */
+      --border-dark: #111827;        /* Solid Black Accent Border */
+      --text: #111827;               /* Deep Solid Black Typography */
+      --text-muted: #374151;         /* Dark Charcoal Grey */
+      --text-light: #6b7280;         /* Slate Grey */
+      --dark-card: #111827;          /* Jet Black Hero Card */
+      --grey-wash: #f3f4f6;          /* Clean Light Grey Wash */
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    
+    html, body {
+      height: 100vh;
+      max-height: 100vh;
+      overflow: hidden; /* Screen-fitted, non-scrollable */
+    }
+
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    /* Animated Pattern Background (Subtle Monochrome Waves) */
+    .bg-pattern {
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      opacity: 0.04;
+      background-image: 
+        radial-gradient(circle at 20% 30%, #000 1px, transparent 1px),
+        radial-gradient(circle at 80% 70%, #000 1px, transparent 1px);
+      background-size: 36px 36px;
+      pointer-events: none;
+    }
+    .wave-bg {
+      position: fixed;
+      bottom: -80px;
+      left: 0;
+      width: 200%;
+      height: 280px;
+      z-index: -1;
+      opacity: 0.03;
+      background: repeat-x url('data:image/svg+xml;utf8,<svg viewBox="0 0 1200 120" xmlns="http://www.w3.org/2000/svg"><path d="M0,0 C150,90 350,-40 500,45 C650,130 900,-20 1200,40 L1200,120 L0,120 Z" fill="%23000"/></svg>');
+      animation: waveFloat 22s linear infinite;
+    }
+    @keyframes waveFloat {
+      0% { transform: translateX(0); }
+      100% { transform: translateX(-50%); }
+    }
+
+    /* Header */
+    header {
+      padding: 12px 32px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.98);
+      backdrop-filter: blur(12px);
+      flex-shrink: 0;
+      z-index: 50;
+    }
+
+    .brand-group {
+      display: flex;
+      flex-direction: column;
+    }
+    .brand-eyebrow {
+      font-size: 0.65rem;
+      font-weight: 800;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+    .brand-title {
+      font-size: 1.35rem;
+      font-weight: 900;
+      letter-spacing: -0.6px;
+      color: var(--text);
+      line-height: 1.1;
+    }
+
+    /* Continuous Tabs Navigation */
+    .continuous-nav {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      padding: 4px;
+      border-radius: 9999px;
+      border: 1px solid var(--border);
+      background: linear-gradient(to bottom, #ffffff, #f8fafc);
+      box-shadow: inset 0 -2px 4px rgba(0, 0, 0, 0.03),
+                  inset 0 1px 0 rgba(255, 255, 255, 0.9),
+                  0 4px 12px rgba(0, 0, 0, 0.02);
+    }
+    .continuous-tab-btn {
+      position: relative;
+      padding: 6px 14px;
+      border-radius: 9999px;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 0.76rem;
+      font-weight: 700;
+      color: var(--text-light);
+      transition: color 0.2s ease;
+      z-index: 2;
+    }
+    .continuous-tab-btn.active {
+      color: #ffffff;
+    }
+    .continuous-active-pill {
+      position: absolute;
+      inset: 0;
+      border-radius: 9999px;
+      background: var(--dark-card);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+      z-index: 1;
+      transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    /* Container Grid: Fits exactly within remaining viewport */
+    .container {
+      max-width: 1440px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 12px 24px;
+      display: grid;
+      grid-template-columns: 1fr 430px;
+      gap: 16px;
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    /* Left Video Showcase Card */
+    .video-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 14px;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.03);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      min-height: 0;
+      justify-content: space-between;
+    }
+
+    .video-wrapper {
+      position: relative;
+      width: 100%;
+      flex: 1;
+      min-height: 0;
+      border-radius: 14px;
+      overflow: hidden;
+      background: #fff;
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .video-wrapper img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .pill-clean {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      background: rgba(255, 255, 255, 0.95);
+      border: 1px solid var(--border);
+      padding: 5px 12px;
+      border-radius: 999px;
+      font-size: 0.7rem;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: var(--text);
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+    }
+
+    /* Dynamic Form Quality Banner */
+    .quality-banner {
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--border-dark);
+      border-radius: 14px;
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: 0 3px 10px rgba(0, 0, 0, 0.03);
+      flex-shrink: 0;
+    }
+    .banner-label {
+      font-size: 0.68rem;
+      font-weight: 800;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+    .banner-value {
+      font-size: 1.15rem;
+      font-weight: 800;
+      letter-spacing: -0.3px;
+      color: var(--text);
+      margin-top: 2px;
+    }
+    .score-circle {
+      text-align: right;
+    }
+    .score-number {
+      font-size: 1.8rem;
+      font-weight: 900;
+      letter-spacing: -0.8px;
+      color: var(--text);
+      line-height: 1;
+    }
+
+    /* Right Panel Widgets */
+    .panel {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-height: 0;
+      justify-content: space-between;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 10px 14px;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.03);
+    }
+
+    .card-heading {
+      font-size: 0.65rem;
+      font-weight: 800;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+
+    /* Headline Card */
+    .headline-card {
+      background: #111827; /* Solid Black */
+      color: #ffffff;
+      border: 1px solid #1f2937;
+      border-radius: 14px;
+      padding: 12px 14px;
+      text-align: center;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+      position: relative;
+      overflow: hidden;
+    }
+    .headline-eyebrow {
+      font-size: 0.62rem;
+      letter-spacing: 1.5px;
+      font-weight: 800;
+      text-transform: uppercase;
+      color: #9ca3af;
+    }
+    .headline-main {
+      font-size: 1.85rem;
+      font-weight: 900;
+      letter-spacing: -0.6px;
+      text-transform: uppercase;
+      margin-top: 1px;
+      line-height: 1.05;
+      color: #ffffff;
+    }
+    .headline-conf {
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: #d1d5db;
+      margin-top: 3px;
+    }
+
+    /* Target Exercise Selector */
+    .exercise-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .card-target-exercise {
+      padding: 8px 12px;
+    }
+    .card-target-exercise .card-heading {
+      margin-bottom: 4px;
+    }
+    .card-target-exercise .exercise-btn {
+      padding: 7px 8px;
+    }
+    .exercise-select-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 2px;
+    }
+    .exercise-btn {
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 9px 8px;
+      font-family: inherit;
+      font-size: 0.82rem;
+      font-weight: 800;
+      letter-spacing: 0.2px;
+      color: var(--text-muted);
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+    }
+    .exercise-btn:hover {
+      border-color: var(--border-dark);
+      color: var(--text);
+    }
+    .exercise-btn.active {
+      background: #111827;
+      border-color: #111827;
+      color: #ffffff;
+      box-shadow: 0 3px 8px rgba(0, 0, 0, 0.12);
+    }
+
+    .card-header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+    .card-header-row .card-heading {
+      margin-bottom: 0;
+    }
+    .btn-reset-inline {
+      background: #ffffff;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-family: inherit;
+      font-size: 0.65rem;
+      font-weight: 800;
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .btn-reset-inline:hover {
+      background: #111827;
+      border-color: #111827;
+      color: #ffffff;
+    }
+
+    /* Separate Repetition Counter Bars for Each Exercise */
+    .exercise-reps-container {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 2px;
+    }
+    .exercise-rep-bar {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px;
+      background: #ffffff;
+      transition: all 0.25s ease;
+    }
+    .exercise-rep-bar.active {
+      border-color: #111827;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    }
+    .rep-bar-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 5px;
+    }
+    .rep-bar-name {
+      font-size: 0.70rem;
+      font-weight: 800;
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
+      color: var(--text);
+    }
+    .rep-bar-tag {
+      font-size: 0.52rem;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      padding: 2px 5px;
+      border-radius: 4px;
+      background: #f3f4f6;
+      color: var(--text-muted);
+    }
+    .exercise-rep-bar.active .rep-bar-tag {
+      background: #111827;
+      color: #ffffff;
+    }
+
+    /* Repetition Boxes Inside Each Exercise Bar */
+    .rep-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+    .rep-box {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 6px 8px;
+      background: #ffffff;
+      transition: all 0.2s ease;
+    }
+    .rep-box.valid {
+      background: #f0fdf4;
+      border: 1.5px solid #166534;
+      border-left: 4px solid #15803d;
+      outline: 1.5px solid #166534;
+      outline-offset: -1px;
+    }
+    .rep-box.valid .rep-num {
+      color: #15803d;
+    }
+    .rep-box.valid .rep-label {
+      color: #166534;
+    }
+    .rep-box.bad {
+      background: #fef2f2;
+      border: 1.5px solid #991b1b;
+      border-left: 4px solid #b91c1c;
+      outline: 1.5px solid #991b1b;
+      outline-offset: -1px;
+    }
+    .rep-box.bad .rep-num {
+      color: #b91c1c;
+    }
+    .rep-box.bad .rep-label {
+      color: #991b1b;
+    }
+    .rep-num {
+      font-size: 1.55rem;
+      font-weight: 900;
+      letter-spacing: -0.6px;
+      line-height: 1;
+      color: var(--text);
+    }
+    .rep-label {
+      font-size: 0.55rem;
+      font-weight: 800;
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-top: 3px;
+    }
+
+    /* Multi-Widget Posture Matrix */
+    .posture-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-top: 4px;
+    }
+    .posture-widget {
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .posture-name {
+      font-size: 0.76rem;
+      font-weight: 800;
+      color: var(--text-muted);
+    }
+    .posture-badge {
+      font-size: 0.88rem;
+      font-weight: 900;
+      color: var(--text);
+    }
+
+    .btn-reset {
+      width: 100%;
+      background: #ffffff;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      padding: 9px;
+      border-radius: 10px;
+      font-family: inherit;
+      font-size: 0.76rem;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      cursor: pointer;
+      margin-top: 10px;
+      transition: all 0.2s;
+    }
+    .btn-reset:hover {
+      background: #111827;
+      border-color: #111827;
+      color: #ffffff;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="bg-pattern"></div>
+  <div class="wave-bg"></div>
+
+  <header>
+    <div class="brand-group">
+      <span class="brand-eyebrow">BIO-MECHANICS AI</span>
+      <span class="brand-title">PHYSIO-TABPFN</span>
+    </div>
+    <nav class="continuous-nav" id="continuousNav">
+      <button class="continuous-tab-btn active" onclick="switchNavTab(this, 'live')">Live Analysis</button>
+      <button class="continuous-tab-btn" id="modeBadge">TABPFN LOCAL</button>
+      <button class="continuous-tab-btn" id="latencyBadge">LATENCY: 0 MS</button>
+    </nav>
+  </header>
+
+  <div class="container">
+    <!-- Video Showcase Left -->
+    <div class="video-card">
+      <div class="video-wrapper">
+        <img src="/video_feed" alt="Live Stream">
+        <div class="pill-clean">Live Camera Feed</div>
+      </div>
+      <div class="quality-banner">
+        <div>
+          <div class="banner-label">Form Feedback</div>
+          <div class="banner-value" id="feedbackText">Ready. Begin your set.</div>
+        </div>
+        <div class="score-circle">
+          <div class="banner-label">Form Quality</div>
+          <div class="score-number" id="qualityScore">100%</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Side Panel Widgets Right -->
+    <div class="panel">
+      <!-- Highest Prediction on Top in Large Poster Typography -->
+      <div class="headline-card">
+        <div class="headline-eyebrow">CURRENT POSTURE</div>
+        <div class="headline-main" id="topHeadline">IDLE</div>
+        <div class="headline-conf" id="topConfidence">100% Confidence</div>
+      </div>
+
+      <!-- Target Exercise & Set Repetition Counters Grouped Close Together -->
+      <div class="exercise-group">
+        <!-- Target Exercise Selector with Standalone Buttons on Top -->
+        <div class="card card-target-exercise">
+          <div class="card-header-row">
+            <div class="card-heading">Target Exercise</div>
+            <span class="rep-bar-tag" style="font-size: 0.52rem;">AUTO-SYNCED</span>
+          </div>
+          <div class="exercise-select-grid">
+            <button class="exercise-btn active" id="btn-Squats" onclick="selectExercise('Squats')">Squats</button>
+            <button class="exercise-btn" id="btn-Step-Ups" onclick="selectExercise('Step-Ups')">Step-Ups</button>
+          </div>
+        </div>
+
+        <!-- Set Repetition Counters (Separate Bar for Each Exercise) -->
+        <div class="card">
+          <div class="card-header-row">
+            <div class="card-heading">Set Repetition Counters</div>
+            <button class="btn-reset-inline" onclick="triggerReset()">Reset Counter</button>
+          </div>
+          <div class="exercise-reps-container">
+            <!-- Squats Repetition Bar -->
+            <div class="exercise-rep-bar active" id="rep-bar-Squats">
+              <div class="rep-bar-header">
+                <span class="rep-bar-name">Squats</span>
+                <span class="rep-bar-tag" id="tag-Squats">ACTIVE</span>
+              </div>
+              <div class="rep-grid">
+                <div class="rep-box valid">
+                  <div class="rep-num" id="validReps-Squats">0</div>
+                  <div class="rep-label">Valid Reps</div>
+                </div>
+                <div class="rep-box bad">
+                  <div class="rep-num" id="badReps-Squats">0</div>
+                  <div class="rep-label">Bad Reps (Rejected)</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Step-Ups Repetition Bar -->
+            <div class="exercise-rep-bar" id="rep-bar-Step-Ups">
+              <div class="rep-bar-header">
+                <span class="rep-bar-name">Step-Ups</span>
+                <span class="rep-bar-tag" id="tag-Step-Ups">READY</span>
+              </div>
+              <div class="rep-grid">
+                <div class="rep-box valid">
+                  <div class="rep-num" id="validReps-Step-Ups">0</div>
+                  <div class="rep-label">Valid Reps</div>
+                </div>
+                <div class="rep-box bad">
+                  <div class="rep-num" id="badReps-Step-Ups">0</div>
+                  <div class="rep-label">Bad Reps (Rejected)</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Hidden span targets to maintain backward compatibility with tests/single-target scripts -->
+          <span id="validReps" style="display:none;">0</span>
+          <span id="badReps" style="display:none;">0</span>
+        </div>
+      </div>
+
+      <!-- Multi-Widget Posture Tracker Matrix -->
+      <div class="card">
+        <div class="card-heading">Posture Matrix (Frame Detections)</div>
+        <div class="posture-grid">
+          <div class="posture-widget">
+            <span class="posture-name">Squats</span>
+            <span class="posture-badge" id="count-Squats">0</span>
+          </div>
+          <div class="posture-widget">
+            <span class="posture-name">Step-Ups</span>
+            <span class="posture-badge" id="count-Step-Ups">0</span>
+          </div>
+          <div class="posture-widget">
+            <span class="posture-name">Idle</span>
+            <span class="posture-badge" id="count-Idle">0</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Bulletproof DOM updater: never throws if an element is missing
+    function setText(id, text) {
+      const el = document.getElementById(id);
+      if (el) {
+        el.innerText = text;
+      }
+    }
+
+    async function updateDashboard() {
+      try {
+        const res = await fetch('/status');
+        if (!res.ok) return;
+        const data = await res.json();
+
+        // 1. Prediction & confidence on top
+        if (data.predicted_exercise) {
+          setText('topHeadline', data.predicted_exercise.toUpperCase());
+        }
+        setText('topConfidence', (data.confidence !== undefined ? data.confidence : 0) + '% Confidence');
+
+        // 2. Dynamic live Form Feedback and Quality %
+        setText('feedbackText', data.feedback || 'Ready. Begin your set.');
+        setText('qualityScore', (data.quality_score !== undefined ? data.quality_score : 100) + '%');
+
+        // 3. Valid Reps and Bad Reps (Synchronize per-exercise bars and active count)
+        if (data.exercise_reps) {
+          if (data.exercise_reps['Squats']) {
+            setText('validReps-Squats', data.exercise_reps['Squats'].valid);
+            setText('badReps-Squats', data.exercise_reps['Squats'].bad);
+          }
+          if (data.exercise_reps['Step-Ups']) {
+            setText('validReps-Step-Ups', data.exercise_reps['Step-Ups'].valid);
+            setText('badReps-Step-Ups', data.exercise_reps['Step-Ups'].bad);
+          }
+        }
+        setText('validReps', data.valid_reps !== undefined ? data.valid_reps : 0);
+        setText('badReps', data.bad_reps !== undefined ? data.bad_reps : 0);
+
+        // Update active indicators on exercise rep bars
+        if (data.active_exercise) {
+          const isSquats = data.active_exercise === 'Squats';
+          const isStepUps = data.active_exercise === 'Step-Ups';
+          const barSquats = document.getElementById('rep-bar-Squats');
+          const barStepUps = document.getElementById('rep-bar-Step-Ups');
+          const tagSquats = document.getElementById('tag-Squats');
+          const tagStepUps = document.getElementById('tag-Step-Ups');
+          if (barSquats) barSquats.classList.toggle('active', isSquats);
+          if (barStepUps) barStepUps.classList.toggle('active', isStepUps);
+          if (tagSquats) {
+            tagSquats.innerText = isSquats ? (data.predicted_exercise === 'Squats' ? 'ACTIVE' : 'READY') : 'READY';
+          }
+          if (tagStepUps) {
+            tagStepUps.innerText = isStepUps ? (data.predicted_exercise === 'Step-Ups' ? 'ACTIVE' : 'READY') : 'READY';
+          }
+        }
+
+        // 4. Latency & Mode
+        setText('latencyBadge', 'LATENCY: ' + (data.latency_ms !== undefined ? data.latency_ms : 0) + ' MS');
+        if (data.mode) {
+          setText('modeBadge', 'TABPFN ' + data.mode);
+        }
+
+        // 5. Posture counts widget matrix
+        if (data.posture_counts) {
+          setText('count-Squats', data.posture_counts['Squats'] || 0);
+          setText('count-Step-Ups', data.posture_counts['Step-Ups'] || 0);
+          setText('count-Idle', data.posture_counts['Idle'] || 0);
+        }
+
+        // 6. Active Exercise Selector pill sync
+        if (data.active_exercise) {
+          const exercises = ['Squats', 'Step-Ups'];
+          const activeIdx = exercises.indexOf(data.active_exercise);
+          if (activeIdx !== -1) {
+            updateSliderPosition(activeIdx);
+          }
+        }
+
+      } catch (err) {
+        console.error('Fetch error:', err);
+      }
+    }
+
+    // Continuous Navigation Pill switch
+    function switchNavTab(btn, mode) {
+      document.querySelectorAll('.continuous-tab-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    }
+
+    // Standalone exercise button selection
+    async function selectExercise(name, index) {
+      document.querySelectorAll('.exercise-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.innerText.trim() === name);
+      });
+      try {
+        await fetch('/set_exercise?name=' + encodeURIComponent(name));
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    // Active button state synchronization
+    function updateSliderPosition(index) {
+      const exercises = ['Squats', 'Step-Ups'];
+      if (index >= 0 && index < exercises.length) {
+        const targetName = exercises[index];
+        document.querySelectorAll('.exercise-btn').forEach(btn => {
+          btn.classList.toggle('active', btn.innerText.trim() === targetName);
+        });
+      }
+    }
+
+    // Sync active state on DOM resize
+    window.addEventListener('resize', () => {
+      const activeBtn = document.querySelector('.exercise-btn.active');
+      const exercises = ['Squats', 'Step-Ups'];
+      if (activeBtn) {
+        const idx = exercises.indexOf(activeBtn.innerText.trim());
+        if (idx !== -1) updateSliderPosition(idx);
+      }
+    });
+
+    // Reset rep counter
+    async function triggerReset() {
+      try {
+        await fetch('/reset');
+        setText('validReps', '0');
+        setText('badReps', '0');
+        setText('validReps-Squats', '0');
+        setText('badReps-Squats', '0');
+        setText('validReps-Step-Ups', '0');
+        setText('badReps-Step-Ups', '0');
+        setText('qualityScore', '100%');
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    // Start polling immediately and regularly
+    updateDashboard();
+    setInterval(updateDashboard, 150);
+    setTimeout(() => updateSliderPosition(0), 100);
+  </script>
+</body>
+</html>
